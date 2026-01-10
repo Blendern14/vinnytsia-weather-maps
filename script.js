@@ -33,6 +33,7 @@ async function loadWeather(lat, lon) {
     `?latitude=${lat}` +
     `&longitude=${lon}` +
     `&current_weather=true` +
+    `&hourly=pressure_msl,relativehumidity_2m,precipitation` +
     `&timezone=Europe/Kyiv`;
 
   try {
@@ -45,7 +46,9 @@ async function loadWeather(lat, lon) {
     info.innerHTML = `
       🌡 <b>Температура:</b> ${w.temperature} °C<br>
       💨 <b>Вітер:</b> ${w.windspeed} м/с<br>
-      🧭 <b>Напрям вітру:</b> ${w.winddirection}°<br>
+      🔵 <b>Тиск:</b> ${data.hourly.pressure_msl[0]} гПа<br>
+      💧 <b>Вологість:</b> ${data.hourly.relativehumidity_2m[0]}%<br>
+      🌧 <b>Опади:</b> ${data.hourly.precipitation[0]} мм<br>
       ⏰ <small>${w.time}</small>
     `;
   } catch (e) {
@@ -64,4 +67,5 @@ map.on(L.Draw.Event.CREATED, function (e) {
 
 // ===== СТАРТ =====
 loadWeather(49.2331, 28.4682);
+
 
