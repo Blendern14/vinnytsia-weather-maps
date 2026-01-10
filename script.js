@@ -1,11 +1,11 @@
-// ===== КАРТА =====
+// ================== КАРТА ==================
 const map = L.map("map").setView([49.2331, 28.4682], 8);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap"
 }).addTo(map);
 
-// ===== ВИДІЛЕННЯ =====
+// ================== ВИДІЛЕННЯ ==================
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
@@ -18,29 +18,33 @@ const drawControl = new L.Control.Draw({
     circle: false,
     circlemarker: false
   },
-  edit: { featureGroup: drawnItems }
+  edit: {
+    featureGroup: drawnItems
+  }
 });
 map.addControl(drawControl);
 
+// ================== БЛОК ІНФО ==================
 const info = document.getElementById("info");
 
-// ===== ПОГОДА =====
+// ================== ПОГОДА ==================
 async function loadWeather(lat, lon) {
   info.innerHTML = "⏳ Завантаження погоди...";
 
   const url =
-    `https://api.open-meteo.com/v1/forecast` +
+    "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${lat}` +
     `&longitude=${lon}` +
     `&current_weather=true` +
     `&daily=moon_phase` +
+    `&forecast_days=1` +
     `&timezone=Europe/Kyiv`;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("API error");
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("API error");
 
-    const data = await res.json();
+    const data = await response.json();
     const w = data.current_weather;
 
     info.innerHTML = `
@@ -50,20 +54,21 @@ async function loadWeather(lat, lon) {
       🌙 <b>Фаза Місяця:</b> ${data.daily.moon_phase[0]}<br>
       ⏰ <small>${w.time}</small>
     `;
-  } catch (e) {
-    console.error(e);
-    info.innerHTML = "❌ Помилка завантаження погоди";
+  } catch (err) {
+    console.error(err);
+    info.innerHTML = "❌ Не вдалося завантажити погоду";
   }
 }
 
-// ===== ПОДІЯ =====
+// ================== ПОДІЯ ВИДІЛЕННЯ ==================
 map.on(L.Draw.Event.CREATED, function (e) {
   drawnItems.clearLayers();
   drawnItems.addLayer(e.layer);
-  const c = e.layer.getBounds().getCenter();
-  loadWeather(c.lat, c.lng);
+
+  const center = e.layer.getBounds().getCenter();
+  loadWeather(center.lat, center.lng);
 });
 
-// ===== СТАРТ =====
+// ================== СТАРТ ==================
 loadWeather(49.2331, 28.4682);
 
