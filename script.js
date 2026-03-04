@@ -1,7 +1,7 @@
 // ===== КАРТА =====
 const map = L.map("map").setView([49.2331, 28.4682], 8);
 
-// супутник
+// супутникова карта
 L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   { attribution: "© Esri Satellite" }
@@ -37,15 +37,10 @@ const info = document.getElementById("info");
 
 // ===== ФАЗА МІСЯЦЯ (офлайн) =====
 function getMoonPhase() {
-
   const now = new Date();
-
   const lp = 2551443;
-
   const newMoon = new Date(1970, 0, 7, 20, 35, 0);
-
   const phase = ((now - newMoon) / 1000) % lp;
-
   const percent = phase / lp;
 
   if (percent < 0.03) return "🌑 Молодик";
@@ -60,8 +55,18 @@ function getMoonPhase() {
 }
 
 
+// ===== РОЗРАХУНОК ПЛОЩІ =====
+function calculateArea(layer) {
+  if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+    const area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
+    return (area / 1000000).toFixed(2); // м² -> км²
+  }
+  return null;
+}
+
+
 // ===== ПОГОДА =====
-async function loadWeather(lat, lon) {
+async function loadWeather(lat, lon, areaKm = null) {
 
   info.innerHTML = "⏳ Завантаження погоди...";
 
@@ -76,32 +81,39 @@ async function loadWeather(lat, lon) {
       `&timezone=auto`;
 
     const res = await fetch(url);
-
     const data = await res.json();
 
     const w = data.current_weather;
 
-    // тиск
-    let pressure = "невідомо";
+    const windMS = (w.windspeed / 3.6).toFixed(1);
 
-    if (data.hourly && data.hourly.pressure_msl) {
+    let pressure = "невідомо";
+    if (data.hourly?.pressure_msl) {
       pressure = Math.round(data.hourly.pressure_msl[0] * 0.75006);
     }
 
-    // опади
     let precipitation = "0";
-
-    if (data.hourly && data.hourly.precipitation) {
+    if (data.hourly?.precipitation) {
       precipitation = data.hourly.precipitation[0];
     }
 
+    // зберігаємо для офлайн
+    localStorage.setItem("lastWeather", JSON.stringify({
+      temperature: w.temperature,
+      wind: windMS,
+      precipitation: precipitation,
+      pressure: pressure,
+      time: w.time
+    }));
+
     info.innerHTML = `
       🌡 <b>Температура:</b> ${w.temperature} °C<br>
-      💨 <b>Вітер:</b> ${w.windspeed} км/год<br>
+      💨 <b>Вітер:</b> ${windMS} м/с<br>
       🌧 <b>Опади:</b> ${precipitation} мм<br>
       🔵 <b>Тиск:</b> ${pressure} мм рт. ст.<br>
       🌙 <b>Фаза місяця:</b> ${getMoonPhase()}<br>
       ⏰ <small>${w.time}</small>
+      ${areaKm ? `<br>📐 <b>Площа:</b> ${areaKm} км²` : ""}
     `;
 
   }
@@ -109,10 +121,27 @@ async function loadWeather(lat, lon) {
 
     console.error(e);
 
-    info.innerHTML = "❌ Не вдалося завантажити погоду";
+    const saved = localStorage.getItem("lastWeather");
 
+    if (saved) {
+
+      const w = JSON.parse(saved);
+
+      info.innerHTML = `
+        ⚠ <b>Офлайн режим</b><br>
+        🌡 <b>Температура:</b> ${w.temperature} °C<br>
+        💨 <b>Вітер:</b> ${w.wind} м/с<br>
+        🌧 <b>Опади:</b> ${w.precipitation} мм<br>
+        🔵 <b>Тиск:</b> ${w.pressure} мм рт. ст.<br>
+        🌙 <b>Фаза місяця:</b> ${getMoonPhase()}<br>
+        ⏰ <small>${w.time}</small>
+        ${areaKm ? `<br>📐 <b>Площа:</b> ${areaKm} км²` : ""}
+      `;
+
+    } else {
+      info.innerHTML = "❌ Немає інтернету і немає збережених даних";
+    }
   }
-
 }
 
 
@@ -120,12 +149,12 @@ async function loadWeather(lat, lon) {
 map.on(L.Draw.Event.CREATED, function (e) {
 
   drawnItems.clearLayers();
-
   drawnItems.addLayer(e.layer);
 
-  const c = e.layer.getBounds().getCenter();
+  const center = e.layer.getBounds().getCenter();
+  const areaKm = calculateArea(e.layer);
 
-  loadWeather(c.lat, c.lng);
+  loadWeather(center.lat, center.lng, areaKm);
 
 });
 
