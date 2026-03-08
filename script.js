@@ -22,7 +22,7 @@ const drawControl = new L.Control.Draw({
   draw: {
     polygon: true,
     rectangle: true,
-    polyline: false,
+    polyline: true,
     marker: false,
     circle: false,
     circlemarker: false
@@ -35,7 +35,7 @@ map.addControl(drawControl);
 const info = document.getElementById("info");
 
 
-// ===== ФАЗА МІСЯЦЯ (офлайн) =====
+// ===== ФАЗА МІСЯЦЯ =====
 function getMoonPhase() {
   const now = new Date();
   const lp = 2551443;
@@ -59,14 +59,32 @@ function getMoonPhase() {
 function calculateArea(layer) {
   if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
     const area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
-    return (area / 1000000).toFixed(2); // м² -> км²
+    return (area / 1000000).toFixed(2);
   }
   return null;
 }
 
 
+// ===== РОЗРАХУНОК ДИСТАНЦІЇ =====
+function calculateDistance(layer) {
+  if (layer instanceof L.Polyline) {
+
+    const latlngs = layer.getLatLngs();
+    let distance = 0;
+
+    for (let i = 1; i < latlngs.length; i++) {
+      distance += latlngs[i - 1].distanceTo(latlngs[i]);
+    }
+
+    return (distance / 1000).toFixed(2); // км
+  }
+
+  return null;
+}
+
+
 // ===== ПОГОДА =====
-async function loadWeather(lat, lon, areaKm = null) {
+async function loadWeather(lat, lon, areaKm = null, distanceKm = null) {
 
   info.innerHTML = "⏳ Завантаження погоди...";
 
@@ -97,15 +115,6 @@ async function loadWeather(lat, lon, areaKm = null) {
       precipitation = data.hourly.precipitation[0];
     }
 
-    // зберігаємо для офлайн
-    localStorage.setItem("lastWeather", JSON.stringify({
-      temperature: w.temperature,
-      wind: windMS,
-      precipitation: precipitation,
-      pressure: pressure,
-      time: w.time
-    }));
-
     info.innerHTML = `
       🌡 <b>Температура:</b> ${w.temperature} °C<br>
       💨 <b>Вітер:</b> ${windMS} м/с<br>
@@ -114,33 +123,13 @@ async function loadWeather(lat, lon, areaKm = null) {
       🌙 <b>Фаза місяця:</b> ${getMoonPhase()}<br>
       ⏰ <small>${w.time}</small>
       ${areaKm ? `<br>📐 <b>Площа:</b> ${areaKm} км²` : ""}
+      ${distanceKm ? `<br>📏 <b>Дистанція:</b> ${distanceKm} км` : ""}
     `;
 
   }
   catch (e) {
-
     console.error(e);
-
-    const saved = localStorage.getItem("lastWeather");
-
-    if (saved) {
-
-      const w = JSON.parse(saved);
-
-      info.innerHTML = `
-        ⚠ <b>Офлайн режим</b><br>
-        🌡 <b>Температура:</b> ${w.temperature} °C<br>
-        💨 <b>Вітер:</b> ${w.wind} м/с<br>
-        🌧 <b>Опади:</b> ${w.precipitation} мм<br>
-        🔵 <b>Тиск:</b> ${w.pressure} мм рт. ст.<br>
-        🌙 <b>Фаза місяця:</b> ${getMoonPhase()}<br>
-        ⏰ <small>${w.time}</small>
-        ${areaKm ? `<br>📐 <b>Площа:</b> ${areaKm} км²` : ""}
-      `;
-
-    } else {
-      info.innerHTML = "❌ Немає інтернету і немає збережених даних";
-    }
+    info.innerHTML = "❌ Немає інтернету";
   }
 }
 
@@ -152,9 +141,11 @@ map.on(L.Draw.Event.CREATED, function (e) {
   drawnItems.addLayer(e.layer);
 
   const center = e.layer.getBounds().getCenter();
-  const areaKm = calculateArea(e.layer);
 
-  loadWeather(center.lat, center.lng, areaKm);
+  const areaKm = calculateArea(e.layer);
+  const distanceKm = calculateDistance(e.layer);
+
+  loadWeather(center.lat, center.lng, areaKm, distanceKm);
 
 });
 
